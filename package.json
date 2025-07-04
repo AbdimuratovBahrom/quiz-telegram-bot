@@ -1,14 +1,13 @@
-
 {
-  "name": "quiz-bot",
+  "name": "quiz-telegram-bot",
   "version": "1.0.0",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js"
   },
   "dependencies": {
-    "node-telegram-bot-api": "^0.61.0",
-    "sqlite3": "^5.1.6",
-    "dotenv": "^16.3.1"
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "node-telegram-bot-api": "^0.61.0"
   }
 }

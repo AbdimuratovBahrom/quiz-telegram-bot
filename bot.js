@@ -1,111 +1,75 @@
-
 require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
-const sqlite3 = require('sqlite3').verbose();
-const fs = require('fs');
+const express = require('express');
 
-const token = process.env.TELEGRAM_TOKEN;
-const bot = new TelegramBot(token, { polling: true });
-const db = new sqlite3.Database('quiz.db');
+const token = process.env.BOT_TOKEN;
+const url = process.env.WEBHOOK_URL;
+const port = process.env.PORT || 3000;
 
-db.run('CREATE TABLE IF NOT EXISTS scores (id INTEGER PRIMARY KEY, username TEXT, score INTEGER, level TEXT)');
+const bot = new TelegramBot(token, { webHook: { port: port } });
+bot.setWebHook(${url}/bot${token});
 
-const questions = {
-  easy: [
-    { question: "What color is the sky?", options: ["Green", "Blue", "Red", "Yellow"], correct: 1 },
-    { question: "What is 2 + 2?", options: ["3", "4", "5", "22"], correct: 1 }
-  ],
-  medium: [
-    { question: "Choose the correct form: 'He ___ to school every day.'", options: ["go", "goes", "gone", "going"], correct: 1 }
-  ],
-  hard: [
-    { question: "Which sentence is grammatically correct?", options: ["She don't like apples", "She doesn't likes apples", "She doesn't like apples", "She don't likes apples"], correct: 2 }
-  ]
-};
+const app = express();
+app.use(express.json());
 
-const userStates = {};
-
-bot.onText(/\/start/, (msg) => {
-  bot.sendMessage(msg.chat.id, "Welcome to the English Quiz Bot! Type /quiz to start.");
+app.post(/bot${token}, (req, res) => {
+  bot.processUpdate(req.body);
+  res.sendStatus(200);
 });
 
-bot.onText(/\/quiz/, (msg) => {
-  const chatId = msg.chat.id;
-  bot.sendMessage(chatId, "Choose difficulty:", {
-    reply_markup: {
-      keyboard: [["Easy"], ["Medium"], ["Hard"]],
-      one_time_keyboard: true,
-      resize_keyboard: true
-    }
-  });
-});
+app.get('/', (req, res) => res.send('🤖 Quiz Bot is running via Webhook!'));
 
-bot.onText(/Easy|Medium|Hard/, (msg) => {
-  const chatId = msg.chat.id;
-  const level = msg.text.toLowerCase();
-  const quiz = questions[level];
-  if (!quiz) return;
-
-  userStates[chatId] = { score: 0, index: 0, quiz, level, username: msg.from.username || msg.from.first_name };
-
-  askQuestion(chatId);
-});
-
-function askQuestion(chatId) {
-  const state = userStates[chatId];
-  if (state.index >= state.quiz.length) {
-    bot.sendMessage(chatId, `Quiz finished! You scored ${state.score}/${state.quiz.length}`);
-    db.run('INSERT INTO scores(username, score, level) VALUES (?, ?, ?)', [state.username, state.score, state.level]);
-    return;
+let questions = [
+  {
+    question: 'What is the plural of “mouse”?',
+    options: ['Mouses', 'Mices', 'Mice', 'Mousen'],
+    answer: 2
+  },
+  {
+    question: 'Choose the correct past tense of “go”:',
+    options: ['Go', 'Went', 'Gone', 'Goed'],
+    answer: 1
   }
+];
 
-  const q = state.quiz[state.index];
-  const opts = {
-    reply_markup: {
-      inline_keyboard: q.options.map((opt, i) => [{
-        text: opt,
-        callback_data: i.toString()
-      }])
-    }
-  };
+let users = {};
 
-  bot.sendMessage(chatId, q.question, opts);
+bot.onText(/\/start/, msg => {
+  const chatId = msg.chat.id;
+  users[chatId] = { index: 0, score: 0 };
+  sendQuestion(chatId);
+});
+
+function sendQuestion(chatId) {
+  const user = users[chatId];
+  if (user.index < questions.length) {
+    const q = questions[user.index];
+    bot.sendMessage(chatId, q.question, {
+      reply_markup: {
+        keyboard: [q.options.map(opt => ({ text: opt }))],
+        one_time_keyboard: true,
+        resize_keyboard: true
+      }
+    });
+  } else {
+    bot.sendMessage(chatId, ✅ Quiz finished! You scored ${user.score}/${questions.length});
+    delete users[chatId];
+  }
 }
 
-bot.on("callback_query", (cbq) => {
-  const chatId = cbq.message.chat.id;
-  const state = userStates[chatId];
-  const answer = parseInt(cbq.data);
-  const correct = state.quiz[state.index].correct;
+bot.on('message', msg => {
+  const chatId = msg.chat.id;
+  const user = users[chatId];
+  if (!user || msg.text.startsWith('/')) return;
 
-  if (answer === correct) state.score++;
-  state.index++;
-  askQuestion(chatId);
+  const q = questions[user.index];
+  const answerIndex = q.options.findIndex(opt => opt === msg.text);
+  if (answerIndex === q.answer) user.score++;
+
+  user.index++;
+  sendQuestion(chatId);
 });
 
-bot.onText(/\/export/, (msg) => {
-  const filePath = 'export.csv';
-  const stream = fs.createWriteStream(filePath);
-  stream.write("username,score,level\n");
-
-  db.each("SELECT username, score, level FROM scores", (err, row) => {
-    if (!err) {
-      stream.write(`${row.username},${row.score},${row.level}\n`);
-    }
-  }, () => {
-    stream.end(() => {
-      bot.sendDocument(msg.chat.id, filePath);
-    });
-  });
-});
-
-bot.onText(/\/topscores/, (msg) => {
-  db.all("SELECT username, score, level FROM scores ORDER BY score DESC LIMIT 5", (err, rows) => {
-    if (err) return bot.sendMessage(msg.chat.id, "Error loading scores.");
-    let text = "🏆 Top Scores:\n";
-    rows.forEach((row, i) => {
-      text += `${i + 1}. ${row.username} — ${row.score} (${row.level})\n`;
-    });
-    bot.sendMessage(msg.chat.id, text);
-  });
+app.listen(port, () => {
+  console.log(✅ Express server listening on ${port});
 });
