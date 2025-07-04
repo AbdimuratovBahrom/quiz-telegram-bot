@@ -7,12 +7,12 @@ const url = process.env.WEBHOOK_URL;
 const port = process.env.PORT || 3000;
 
 const bot = new TelegramBot(token, { webHook: { port: port } });
-bot.setWebHook(${url}/bot${token});
+bot.setWebHook(`${url}/bot${token}`);
 
 const app = express();
 app.use(express.json());
 
-app.post(/bot${token}, (req, res) => {
+app.post(`/bot${token}`, (req, res) => {
   bot.processUpdate(req.body);
   res.sendStatus(200);
 });
@@ -52,7 +52,7 @@ function sendQuestion(chatId) {
       }
     });
   } else {
-    bot.sendMessage(chatId, ✅ Quiz finished! You scored ${user.score}/${questions.length});
+    bot.sendMessage(chatId,` ✅ Quiz finished! You scored ${user.score}/${questions.length}`);
     delete users[chatId];
   }
 }
@@ -71,5 +71,5 @@ bot.on('message', msg => {
 });
 
 app.listen(port, () => {
-  console.log(✅ Express server listening on ${port});
+  console.log(`✅ Express server listening on ${port}`);
 });
